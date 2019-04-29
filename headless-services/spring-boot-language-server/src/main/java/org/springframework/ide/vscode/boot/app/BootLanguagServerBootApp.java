@@ -13,8 +13,10 @@ package org.springframework.ide.vscode.boot.app;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.ide.vscode.boot.common.PropertyCompletionFactory;
 import org.springframework.ide.vscode.boot.common.RelaxedNameConfig;
@@ -54,16 +56,24 @@ import org.springframework.ide.vscode.commons.yaml.structure.YamlDocument;
 import org.springframework.ide.vscode.commons.yaml.structure.YamlStructureProvider;
 import org.yaml.snakeyaml.Yaml;
 
-@SpringBootApplication(proxyBeanMethods = false)
+@SpringBootConfiguration
 public class BootLanguagServerBootApp {
 	private static final String SERVER_NAME = "boot-language-server";
 
 	public static void main(String[] args) throws Exception {
-		LogRedirect.bootRedirectToFile(SERVER_NAME); //TODO: use boot (or logback realy) to configure logging instead.
-		SpringApplication.run(BootLanguagServerBootApp.class, args);
+		LogRedirect.bootRedirectToFile(SERVER_NAME); // TODO: use boot (or logback realy) to configure logging instead.
+		new SpringApplication(Object.class) {
+			{
+				addInitializers(new SpringSymbolIndexerConfigInitializer(), new BootLanguagServerBootAppInitializer());
+			}
+			@Override
+			protected void load(ApplicationContext context, Object[] sources) {
+			};
+		}.run(args);
 	}
 
-	@Bean public String serverName() {
+	@Bean
+	public String serverName() {
 		return SERVER_NAME;
 	}
 
@@ -84,19 +94,26 @@ public class BootLanguagServerBootApp {
 	}
 
 	@ConditionalOnMissingClass("org.springframework.ide.vscode.languageserver.testharness.LanguageServerHarness")
-	@Bean AdHocSpringPropertyIndexProvider adHocProperties(BootLanguageServerParams params, FileObserver fileObserver, DocumentEventListenerManager documentEvents) {
-		return new AdHocSpringPropertyIndexProvider(params.projectFinder, params.projectObserver, fileObserver, documentEvents);
+	@Bean
+	AdHocSpringPropertyIndexProvider adHocProperties(BootLanguageServerParams params, FileObserver fileObserver,
+			DocumentEventListenerManager documentEvents) {
+		return new AdHocSpringPropertyIndexProvider(params.projectFinder, params.projectObserver, fileObserver,
+				documentEvents);
 	}
 
-	@Bean FileObserver fileObserver(SimpleLanguageServer server) {
+	@Bean
+	FileObserver fileObserver(SimpleLanguageServer server) {
 		return server.getWorkspaceService().getFileObserver();
 	}
 
-	@Bean ValueProviderRegistry valueProviders() {
+	@Bean
+	ValueProviderRegistry valueProviders() {
 		return new ValueProviderRegistry();
 	}
 
-	@Bean InitializingBean initializeValueProviders(ValueProviderRegistry r, @Qualifier("adHocProperties") ProjectBasedPropertyIndexProvider adHocProperties, SourceLinks sourceLinks) {
+	@Bean
+	InitializingBean initializeValueProviders(ValueProviderRegistry r,
+			@Qualifier("adHocProperties") ProjectBasedPropertyIndexProvider adHocProperties, SourceLinks sourceLinks) {
 		return () -> {
 			r.def("logger-name", LoggerNameProvider.factory(adHocProperties, sourceLinks));
 			r.def("class-reference", ClassReferenceProvider.factory(sourceLinks));
@@ -104,30 +121,39 @@ public class BootLanguagServerBootApp {
 	}
 
 	@ConditionalOnMissingClass("org.springframework.ide.vscode.languageserver.testharness.LanguageServerHarness")
-	@Bean BootLanguageServerParams serverParams(SimpleLanguageServer server, ValueProviderRegistry valueProviders, BootLsConfigProperties configProperties) {
+	@Bean
+	BootLanguageServerParams serverParams(SimpleLanguageServer server, ValueProviderRegistry valueProviders,
+			BootLsConfigProperties configProperties) {
 		return BootLanguageServerParams.createDefault(server, valueProviders, configProperties.isEnableJandexIndex());
 	}
 
 	@ConditionalOnMissingClass("org.springframework.ide.vscode.languageserver.testharness.LanguageServerHarness")
-	@Bean SourceLinks sourceLinks(SimpleLanguageServer server, CompilationUnitCache cuCache, BootLanguageServerParams params) {
+	@Bean
+	SourceLinks sourceLinks(SimpleLanguageServer server, CompilationUnitCache cuCache,
+			BootLanguageServerParams params) {
 		return SourceLinkFactory.createSourceLinks(server, cuCache, params.projectFinder);
 	}
 
-	@Bean CompilationUnitCache cuCache(BootLanguageServerParams params, SimpleTextDocumentService documents) {
+	@Bean
+	CompilationUnitCache cuCache(BootLanguageServerParams params, SimpleTextDocumentService documents) {
 		return new CompilationUnitCache(params.projectFinder, documents, params.projectObserver);
 	}
 
-	@Bean JavaDocumentUriProvider javaDocumentUriProvider() {
+	@Bean
+	JavaDocumentUriProvider javaDocumentUriProvider() {
 		switch (LspClient.currentClient()) {
 		case ECLIPSE:
-			// LSP4E doesn't support JDT java doc URIs. Only supports file, eclipse intro and http URIs for docs
+			// LSP4E doesn't support JDT java doc URIs. Only supports file, eclipse intro
+			// and http URIs for docs
 			return new EclipseJavaDocumentUriProvider();
 		default:
 			return new JdtJavaDocumentUriProvider();
 		}
 	}
 
-	@Bean JavaElementLocationProvider javaElementLocationProvider(SimpleLanguageServer server, CompilationUnitCache cuCache, JavaDocumentUriProvider javaDocUriProvider) {
+	@Bean
+	JavaElementLocationProvider javaElementLocationProvider(SimpleLanguageServer server, CompilationUnitCache cuCache,
+			JavaDocumentUriProvider javaDocUriProvider) {
 		switch (LspClient.currentClient()) {
 		case ECLIPSE:
 		case VSCODE:
@@ -138,26 +164,34 @@ public class BootLanguagServerBootApp {
 		}
 	}
 
-	@Bean Yaml yaml() {
-		//TODO: Yaml is not re-entrant. So its a bit fishy to create a 're-usable' bean for this!
+	@Bean
+	Yaml yaml() {
+		// TODO: Yaml is not re-entrant. So its a bit fishy to create a 're-usable' bean
+		// for this!
 		return new Yaml();
 	}
 
-	@Bean YamlASTProvider yamlAstProvider() {
+	@Bean
+	YamlASTProvider yamlAstProvider() {
 		return new YamlParser();
 	}
 
-	@Bean YamlStructureProvider yamlStructureProvider() {
+	@Bean
+	YamlStructureProvider yamlStructureProvider() {
 		return YamlStructureProvider.DEFAULT;
 	}
 
-	@Bean YamlAssistContextProvider yamlAssistContextProvider(BootLanguageServerParams params, JavaElementLocationProvider javaElementLocationProvider, SourceLinks sourceLinks) {
+	@Bean
+	YamlAssistContextProvider yamlAssistContextProvider(BootLanguageServerParams params,
+			JavaElementLocationProvider javaElementLocationProvider, SourceLinks sourceLinks) {
 		return new YamlAssistContextProvider() {
 			@Override
 			public YamlAssistContext getGlobalAssistContext(YamlDocument ydoc) {
 				IDocument doc = ydoc.getDocument();
 				FuzzyMap<PropertyInfo> index = params.indexProvider.getIndex(doc);
-				return ApplicationYamlAssistContext.global(ydoc, index, new PropertyCompletionFactory(), params.typeUtilProvider.getTypeUtil(sourceLinks, doc), RelaxedNameConfig.COMPLETION_DEFAULTS, javaElementLocationProvider);
+				return ApplicationYamlAssistContext.global(ydoc, index, new PropertyCompletionFactory(),
+						params.typeUtilProvider.getTypeUtil(sourceLinks, doc), RelaxedNameConfig.COMPLETION_DEFAULTS,
+						javaElementLocationProvider);
 			}
 		};
 	}

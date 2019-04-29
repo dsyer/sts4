@@ -1,3 +1,7 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
 org.springframework.ide.vscode.languageserver.starter.LanguageServerAutoConf,\
 org.springframework.ide.vscode.languageserver.starter.LanguageServerRunnerAutoConf
+
+org.springframework.context.ApplicationContextInitializer=\
+org.springframework.ide.vscode.languageserver.starter.LanguageServerAutoConfInitializer,\
+org.springframework.ide.vscode.languageserver.starter.LanguageServerRunnerAutoConfInitializer
